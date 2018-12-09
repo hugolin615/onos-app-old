@@ -77,6 +77,11 @@ import org.onosproject.net.packet.DefaultOutboundPacket;
 import static org.onosproject.net.flow.DefaultTrafficTreatment.builder;
 import org.slf4j.Logger;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Dictionary;
 import java.util.HashMap;
@@ -111,7 +116,9 @@ public class ReactiveForwarding {
     //public static boolean BEGIN = false;
     //public static int ATTACK_TYPE = 0;
     //private static HashMap<Integer, Integer> visit_dev;
-    public static final int NDEVICE = 2;
+    private int NDEVICE = 0;
+    private String storeFile = null;
+    
 
     private final Logger log = getLogger(getClass());
 
@@ -247,6 +254,36 @@ public class ReactiveForwarding {
         //switches = null;
         //generator = new Random(0);
         //replayValues = Maps.newHashMap();
+        
+        Charset charset = Charset.forName("US-ASCII");
+        java.nio.file.Path filePath = Paths.get("/home/hugo/Dropbox/Public/ndev.txt");
+        try (BufferedReader reader = Files.newBufferedReader(filePath, charset)) {
+            String line = null;
+            //int row_count = 0;
+            //int row_count2 = 0;
+            //String deviceName = null;
+
+            int i = 1;
+            while ((line = reader.readLine()) != null) {
+                //System.out.println(line);
+                //
+                if (i == 1){
+                   storeFile = line; 
+                } 
+                if (i == 2){
+                    NDEVICE = Integer.parseInt(line);
+                }
+                if (i > 2){
+                    throw new IOException("Hui Lin Debug: weird ndev file!");
+                }
+                i++;
+                
+            } 
+        } catch (IOException x) {
+            //System.err.format("IOException: %s%n", x);
+            log.warn("Can not open measurement file.");
+        }
+
 
         ////Hui Lin
         /*
@@ -523,10 +560,13 @@ public class ReactiveForwarding {
             String dstIdStr = dstId.toString();
             DeviceId dpid = pkt.receivedFrom().deviceId();
             String dpidStr = dpid.toString();
+            int dpidInt = 0;
             PortNumber inport = pkt.receivedFrom().port();
 
             Integer srcHostId = 0;
             Integer dstHostId = 0;
+            Integer edgeSwitchId = 0;
+            //String edgeSwitchIdStr = null;
 
             if (ethPkt == null) {
                 return;
@@ -560,8 +600,25 @@ public class ReactiveForwarding {
             Integer srcIp = ipv4Packet.getSourceAddress();
             Integer dstIp = ipv4Packet.getDestinationAddress();
 
+            if ( ( (srcIp & 0xFFFF0000) != 0x0A000000 ) || ( (dstIp & 0xFFFF0000) != 0x0A000000 ) ){
+                flood(context);
+                return;
+            }
+
             srcHostId = srcIp & 0x000000FF;
             dstHostId = dstIp & 0x000000FF;
+            if ( srcHostId > NDEVICE ){
+                //edgeSwitchId = (srcIp / 256) % 256;
+                edgeSwitchId = (srcIp >>> 8) & 0x000000FF;
+                dpidInt = Integer.parseInt(dpidStr.substring(15), 16);
+                //edgeSwitchIdStr = "of:000000000000000"
+            }
+            if ( dstHostId > NDEVICE ){
+                //edgeSwitchId = (srcIp / 256) % 256;
+                edgeSwitchId = (dstIp >>> 8) & 0x000000FF;
+                dpidInt = Integer.parseInt(dpidStr.substring(15), 16);
+            }
+
 
             mac2port.putIfAbsent(dpidStr, Maps.newHashMap());
             ip2port.putIfAbsent(dpidStr, Maps.newHashMap());
@@ -598,7 +655,8 @@ public class ReactiveForwarding {
                 }
             }
 
-            log.info("Hui Lin inbound packet {} from {} to {}", dpid, srcIp, dstIp);
+            //log.info("Hui Lin inbound packet {} from {} to {}", dpid, srcIp, dstIp);
+            log.info("Hui Lin packet {} {} from {}.{} to {}.{}", dpid, dpidInt, (srcIp / 256) % 256, srcIp % 256, (dstIp / 256)%256, dstIp % 256);
 
             if (temp1.containsKey(dstIp)) {
                 outport = temp1.get(dstIp);
@@ -613,7 +671,8 @@ public class ReactiveForwarding {
                 }
             }
 
-            if ((srcHostId > NDEVICE) || (dstHostId > NDEVICE)){
+            if ( ((srcHostId > NDEVICE) || (dstHostId > NDEVICE)) && (edgeSwitchId == dpidInt) ){
+                log.info("Hui Lin Debug edge switch {}", dpidInt);
                 packetOut(context, outport);
             }
             else {

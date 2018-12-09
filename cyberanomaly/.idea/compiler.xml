@@ -9,8 +9,5 @@
         <module name="onos-app-cyberanomaly" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="onos-app-cyberanomaly" target="1.8" />
-    </bytecodeTargetLevel>
   </component>
 </project>
