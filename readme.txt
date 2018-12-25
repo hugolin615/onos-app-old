@@ -7,3 +7,8 @@ For the time sake:
 
 learningswitch:
     only include the codes of learningswitch based on L2 or L3 switch in pox controller
+
+edge:
+    simple test process-aware edge computing infrastructure
+
+
