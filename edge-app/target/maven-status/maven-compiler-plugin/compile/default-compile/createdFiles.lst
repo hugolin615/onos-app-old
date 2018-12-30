@@ -1,4 +1,8 @@
+org/edge/app/BeginCommand.class
+org/edge/app/AppCommand.class
 org/onosproject/fwd/ReactiveForwarding$InternalTopologyListener.class
+org/edge/app/EndCommand.class
+org/onosproject/fwd/ReactiveForwarding$EdgeRuleIndex.class
 org/onosproject/fwd/ReactiveForwarding.class
 org/onosproject/fwd/ReactiveForwarding$ReactivePacketProcessor.class
 org/onosproject/fwd/DNP3.class

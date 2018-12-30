@@ -96,7 +96,7 @@ import java.util.Arrays;
 //import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Lists;
-//import com.google.common.collect.Sets;
+import com.google.common.collect.Sets;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -171,6 +171,22 @@ public class ReactiveForwarding {
     //private Random generator;
     //private Map<Integer, List<Double>> replayValues;
     //private Integer REPLAY_MAX = 20;
+    //
+    private class EdgeRuleIndex {
+        MacAddress src;
+        MacAddress dst;
+        DeviceId id;
+        private EdgeRuleIndex(MacAddress src, MacAddress dst, DeviceId id) {
+            this.src = src;
+            this.dst = dst;
+            this.id = id;
+        }
+        @Override
+        public int hashCode() {
+            return Objects.hash(src, dst, id);
+        }
+    }
+    private Map<Integer, EdgeRuleIndex> edgeRules;  // index by the hash code to avoid conflict
 
     @Property(name = "packetOutOnly", boolValue = false,
             label = "Enable packet-out only forwarding; default is false")
@@ -249,6 +265,7 @@ public class ReactiveForwarding {
         mac2port = Maps.newHashMap();
         ip2host = Maps.newHashMap();
         ip2port = Maps.newHashMap();
+        edgeRules = Maps.newHashMap();
         //switchCount = Maps.newHashMap();
         //curSwitch = "hello";
         //switches = null;
@@ -560,13 +577,15 @@ public class ReactiveForwarding {
             String dstIdStr = dstId.toString();
             DeviceId dpid = pkt.receivedFrom().deviceId();
             String dpidStr = dpid.toString();
-            int dpidInt = 0;
+            //int dpidInt = 0;
             PortNumber inport = pkt.receivedFrom().port();
 
             Integer srcHostId = 0;
             Integer dstHostId = 0;
-            Integer edgeSwitchId = 0;
+            //Integer edgeSwitchId = 0;
             //String edgeSwitchIdStr = null;
+            int tcpSrcPort = 0;
+            int tcpDstPort = 0;
 
             if (ethPkt == null) {
                 return;
@@ -605,8 +624,19 @@ public class ReactiveForwarding {
                 return;
             }
 
+            // get tcp dst src port
+            byte ipv4Protocol = ipv4Packet.getProtocol();
+            if (ipv4Protocol == IPv4.PROTOCOL_TCP) {
+                //log.info("Hui Lin found tcp packet");
+                TCP tcpPacket = (TCP) ipv4Packet.getPayload();
+                tcpSrcPort = tcpPacket.getSourcePort();
+                tcpDstPort = tcpPacket.getDestinationPort();
+            }
+
+
             srcHostId = srcIp & 0x000000FF;
             dstHostId = dstIp & 0x000000FF;
+            /*
             if ( srcHostId > NDEVICE ){
                 //edgeSwitchId = (srcIp / 256) % 256;
                 edgeSwitchId = (srcIp >>> 8) & 0x000000FF;
@@ -618,6 +648,7 @@ public class ReactiveForwarding {
                 edgeSwitchId = (dstIp >>> 8) & 0x000000FF;
                 dpidInt = Integer.parseInt(dpidStr.substring(15), 16);
             }
+            */
 
 
             mac2port.putIfAbsent(dpidStr, Maps.newHashMap());
@@ -656,7 +687,7 @@ public class ReactiveForwarding {
             }
 
             //log.info("Hui Lin inbound packet {} from {} to {}", dpid, srcIp, dstIp);
-            log.info("Hui Lin packet {} {} from {}.{} to {}.{}", dpid, dpidInt, (srcIp / 256) % 256, srcIp % 256, (dstIp / 256)%256, dstIp % 256);
+            log.info("Hui Lin packet {} from {}.{} to {}.{}", dpid, (srcIp / 256) % 256, srcIp % 256, (dstIp / 256)%256, dstIp % 256);
 
             if (temp1.containsKey(dstIp)) {
                 outport = temp1.get(dstIp);
@@ -671,14 +702,19 @@ public class ReactiveForwarding {
                 }
             }
 
-            if ( ((srcHostId > NDEVICE) || (dstHostId > NDEVICE)) && (edgeSwitchId == dpidInt) ){
-                log.info("Hui Lin Debug edge switch {}", dpidInt);
-                packetOut(context, outport);
-            }
-            else {
-                installRule(context, outport);
-            }
+            // install rules for all packets
+            installRule(context, outport);
             //packetOut(context, outport);
+
+            // record all packets in edges and peoridically remove them
+            if ((tcpDstPort == DEFAULT_DNP3_PORT) || (tcpDstPort == (DEFAULT_DNP3_PORT + 1))) {
+                MacAddress src = ethPkt.getSourceMAC();
+                MacAddress dst = ethPkt.getDestinationMAC();
+
+                EdgeRuleIndex ruleIndex = new EdgeRuleIndex(src, dst, dpid);
+                int ruleIndexHash = ruleIndex.hashCode();
+                edgeRules.putIfAbsent(ruleIndexHash, ruleIndex);
+            }
 
             /*
 
