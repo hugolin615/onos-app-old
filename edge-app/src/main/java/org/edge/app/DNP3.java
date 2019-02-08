@@ -1,4 +1,4 @@
-package org.onosproject.fwd;
+package org.edge.app;
 
 import org.onlab.packet.BasePacket;
 import org.onlab.packet.Deserializer;

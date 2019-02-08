@@ -1,5 +1,5 @@
 Manifest-Version: 1.0
-Bnd-LastModified: 1546141888251
+Bnd-LastModified: 1546463630259
 Build-Jdk: 1.8.0_191
 Built-By: hugo
 Bundle-Blueprint: OSGI-INF/blueprint/shell-config.xml
@@ -9,12 +9,11 @@ Bundle-Name: edge-app
 Bundle-SymbolicName: org.edge.app
 Bundle-Version: 1.0.0.SNAPSHOT
 Created-By: Apache Maven Bundle Plugin
-Export-Package: org.onosproject.fwd;uses:="org.onlab.packet,org.onosproj
- ect.cfg,org.onosproject.core,org.onosproject.net.flow,org.onosproject.n
- et.flowobjective,org.onosproject.net.host,org.onosproject.net.packet,or
- g.onosproject.net.topology,org.osgi.service.component";version="1.0.0",
- org.edge.app;uses:="org.apache.karaf.shell.commands,org.onosproject.cli
- ";version="1.0.0"
+Export-Package: org.edge.app;uses:="org.apache.karaf.shell.commands,org.
+ onlab.packet,org.onosproject.cfg,org.onosproject.cli,org.onosproject.co
+ re,org.onosproject.event,org.onosproject.net.flow,org.onosproject.net.f
+ lowobjective,org.onosproject.net.host,org.onosproject.net.packet,org.on
+ osproject.net.topology,org.osgi.service.component";version="1.0.0"
 Import-Package: com.google.common.base;version="[22.0,23)",com.google.co
  mmon.collect;version="[22.0,23)",org.apache.karaf.shell.commands;versio
  n="[3.0,4)",org.onlab.packet;version="[1.13,2)",org.onlab.util;version=
@@ -30,4 +29,5 @@ Import-Package: com.google.common.base;version="[22.0,23)",com.google.co
  0,2.0.0)",org.osgi.service.component;version="[1.2,2)",org.slf4j;versio
  n="[1.7,2)"
 Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
+Service-Component: OSGI-INF/org.edge.app.ReactiveForwarding.xml
 Tool: Bnd-3.5.0.201709291849

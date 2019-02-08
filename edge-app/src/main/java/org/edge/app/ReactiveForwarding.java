@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onosproject.fwd;
+package org.edge.app;
 
 import com.google.common.collect.ImmutableSet;
 import org.apache.felix.scr.annotations.Activate;
@@ -92,6 +92,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.Arrays;
 //import java.lang.reflect.Array;
+//import java.net.URI;
 
 //import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
@@ -102,17 +103,28 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import org.onosproject.event.AbstractListenerManager;
+
 /**
  * Sample reactive forwarding application.
  */
 @Component(immediate = true)
 public class ReactiveForwarding {
+        //extends AbstractListenerManager<NetworkEvent, NetworkListener>
+        //implements DeviceService {
 
-    private static final int DEFAULT_TIMEOUT = 60;
+    private static final int DEFAULT_TIMEOUT = 10;
     private static final int DEFAULT_PRIORITY = 10;
+    private static final int EDGE = 1;
+    private static final int STATICFLOW = 1;
+    private static final String FLOWFILE = "/home/hugo/Dropbox/Public/flowrules.txt"; 
 
     private static final int DEFAULT_DNP3_PORT = 20000;
-    public static final int UPDATE_INTERVAL = 4;
+    public static final int UPDATE_INTERVAL = 30;
     //public static boolean BEGIN = false;
     //public static int ATTACK_TYPE = 0;
     //private static HashMap<Integer, Integer> visit_dev;
@@ -187,6 +199,7 @@ public class ReactiveForwarding {
         }
     }
     private Map<Integer, EdgeRuleIndex> edgeRules;  // index by the hash code to avoid conflict
+    private static ScheduledExecutorService device_scheduler = null;
 
     @Property(name = "packetOutOnly", boolValue = false,
             label = "Enable packet-out only forwarding; default is false")
@@ -271,7 +284,8 @@ public class ReactiveForwarding {
         //switches = null;
         //generator = new Random(0);
         //replayValues = Maps.newHashMap();
-        
+       
+        /*
         Charset charset = Charset.forName("US-ASCII");
         java.nio.file.Path filePath = Paths.get("/home/hugo/Dropbox/Public/ndev.txt");
         try (BufferedReader reader = Files.newBufferedReader(filePath, charset)) {
@@ -300,6 +314,14 @@ public class ReactiveForwarding {
             //System.err.format("IOException: %s%n", x);
             log.warn("Can not open measurement file.");
         }
+        */
+        device_scheduler = Executors.newScheduledThreadPool(1);
+
+        if (EDGE == 1)
+            removeEdgeRule();
+
+        if (STATICFLOW == 1)
+            installFlowRule();
 
 
         ////Hui Lin
@@ -351,6 +373,9 @@ public class ReactiveForwarding {
         mac2port = null;
         ip2host = null;
         ip2port = null;
+        edgeRules = null;
+        device_scheduler.shutdown();
+        device_scheduler = null;
         //switchCount = null;
         //generator = null;
         //replayValues = null;
@@ -703,11 +728,12 @@ public class ReactiveForwarding {
             }
 
             // install rules for all packets
+            //log.info("Hui Lin Debug port {}", outport);
             installRule(context, outport);
             //packetOut(context, outport);
 
             // record all packets in edges and peoridically remove them
-            if ((tcpDstPort == DEFAULT_DNP3_PORT) || (tcpDstPort == (DEFAULT_DNP3_PORT + 1))) {
+            if (tcpDstPort == (DEFAULT_DNP3_PORT + 1)) {
                 MacAddress src = ethPkt.getSourceMAC();
                 MacAddress dst = ethPkt.getDestinationMAC();
 
@@ -844,6 +870,7 @@ public class ReactiveForwarding {
         if (matchDstMacOnly) {
             selectorBuilder.matchEthDst(inPkt.getDestinationMAC());
         } else {
+            //log.info("Hui Lin DEBUG 873");
             selectorBuilder.matchInPort(context.inPacket().receivedFrom().port())
                     .matchEthSrc(inPkt.getSourceMAC())
                     .matchEthDst(inPkt.getDestinationMAC());
@@ -950,7 +977,7 @@ public class ReactiveForwarding {
                 .makeTemporary(flowTimeout)
                 .add();
 
-        //log.info("Hui Lin: not installed rule heres ");
+        log.info("Hui Lin install {} {} {} {}", context.inPacket().receivedFrom().deviceId(), inPkt.getSourceMAC(), inPkt.getDestinationMAC(), portNumber);
         flowObjectiveService.forward(context.inPacket().receivedFrom().deviceId(),
                                      forwardingObjective);
 
@@ -1132,6 +1159,145 @@ public class ReactiveForwarding {
         public int hashCode() {
             return Objects.hash(src, dst);
         }
+    }
+
+    private void installFlowRule(){
+        Charset charset = Charset.forName("US-ASCII");
+        java.nio.file.Path filePath = Paths.get(FLOWFILE);
+        try (BufferedReader reader = Files.newBufferedReader(filePath, charset)) {
+            String line = null;
+            //int row_count = 0;
+            //int row_count2 = 0;
+            //String deviceName = null;
+
+            //int i = 1; 
+
+
+
+            while ((line = reader.readLine()) != null) {
+                //System.out.println(line);
+                
+                TrafficSelector.Builder selectorBuilder = DefaultTrafficSelector.builder();
+                String[] parts = line.split(" ");
+                if (parts.length != 5) {
+                    log.warn("split errors");
+                    return;
+                }
+                if (parts[1].equals("0x0800"))
+                    selectorBuilder.matchEthType(Ethernet.TYPE_IPV4);
+
+                selectorBuilder.matchEthSrc(MacAddress.valueOf(parts[2]))
+                        .matchEthDst(MacAddress.valueOf(parts[3]));
+
+                TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                        .setOutput(PortNumber.portNumber(Integer.parseInt(parts[4])))
+                        .build();
+
+                ForwardingObjective forwardingObjective = DefaultForwardingObjective.builder()
+                        .withSelector(selectorBuilder.build())
+                        .withTreatment(treatment)
+                        .withPriority(flowPriority)
+                        .withFlag(ForwardingObjective.Flag.VERSATILE)
+                        .fromApp(appId)
+                        .makeTemporary(60*5)
+                        .add();
+
+                //DeviceId temp = str2dpid(parts[0]);
+                //DeviceId temp = new DeviceId(parts[0]);
+
+                log.info("Hui Lin preinstall {} {} {} {}", str2dpid(parts[0]), MacAddress.valueOf(parts[2]), MacAddress.valueOf(parts[3]), PortNumber.portNumber(Integer.parseInt(parts[4])));
+                flowObjectiveService.forward(str2dpid(parts[0]),
+                                         forwardingObjective);
+
+                // installed arp first for each switch
+                TrafficSelector.Builder selectorBuilder0 = DefaultTrafficSelector.builder();
+                selectorBuilder0.matchEthType(Ethernet.TYPE_ARP);
+                TrafficTreatment treatment0 = DefaultTrafficTreatment.builder()
+                        .setOutput(PortNumber.FLOOD)
+                        .build();
+
+                ForwardingObjective forwardingObjective0 = DefaultForwardingObjective.builder()
+                        .withSelector(selectorBuilder0.build())
+                        .withTreatment(treatment0)
+                        .withPriority(flowPriority)
+                        .withFlag(ForwardingObjective.Flag.VERSATILE)
+                        .fromApp(appId)
+                        .makeTemporary(60*30)
+                        .add();
+                flowObjectiveService.forward(str2dpid(parts[0]),
+                                             forwardingObjective0);
+
+
+            }
+        } catch (IOException x) {
+            //System.err.format("IOException: %s%n", x);
+            log.warn("Can not open flow rule file.");
+        }
+
+    }
+
+    private DeviceId str2dpid(String input){
+        int inputLength = input.length();
+        String result = new String(input);
+        
+        for (int i = 0; i < (16-inputLength); i++){
+            result = '0' + result;
+        }
+        result = "of:" + result;
+        //log.info("Hui Lin Debug: {}", result);
+        //URI temp = new URI(result);
+        return DeviceId.deviceId(result);
+    }
+
+    public void removeEdgeRule() {
+        log.info("Scheduling remove Edge rule");
+        device_scheduler.scheduleAtFixedRate(new RemoveEdgeRuleTask(), 0, UPDATE_INTERVAL, TimeUnit.SECONDS);
+    }
+
+    private class RemoveEdgeRuleTask implements Runnable {
+
+        @Override
+        public void run() {
+            log.info("entering peoridic run");
+            if (!edgeRules.isEmpty()){
+                log.info("beginning to remove edge rules");
+                for (EdgeRuleIndex er : edgeRules.values()){
+                    SrcDstPair temp = new SrcDstPair(er.src, er.dst);
+
+                    cleanFlowRules(temp, er.id);
+                }
+            }
+        }
+    }
+
+    // Removes flow rules off specified device with specific SrcDstPair
+    private void cleanFlowRules2(MacAddress src, MacAddress dst,DeviceId id) {
+        log.trace("Searching for flow rules to remove from: " + id);
+        log.trace("Removing flows w/ SRC=" + src + ", DST=" + dst);
+        for (FlowEntry r : flowRuleService.getFlowEntries(id)) {
+            boolean matchesSrc = false, matchesDst = false;
+            for (Instruction i : r.treatment().allInstructions()) {
+                if (i.type() == Instruction.Type.OUTPUT) {
+                    // if the flow has matching src and dst
+                    for (Criterion cr : r.selector().criteria()) {
+                        if (cr.type() == Criterion.Type.ETH_DST) {
+                            if (((EthCriterion) cr).mac().equals(dst)) {
+                                matchesDst = true;
+                            }
+                        } else if (cr.type() == Criterion.Type.ETH_SRC) {
+                            if (((EthCriterion) cr).mac().equals(src)) {
+                                matchesSrc = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if (matchesDst && matchesSrc) {
+                log.trace("Removed flow rule from device: " + id);
+                flowRuleService.removeFlowRules((FlowRule) r);
+            }
+        }
+
     }
 
     private int computecrc(byte[] dataOctet) {

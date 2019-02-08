@@ -1,0 +1,4 @@
+
+Disabling onos deleting existing switch rules
+    You can change this behaviour by doing this in the CLI:
+    cfg set org.onosproject.net.flow.impl.FlowRuleManager allowExtraneousRules true

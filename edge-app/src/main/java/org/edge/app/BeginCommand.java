@@ -3,6 +3,8 @@ package org.edge.app;
 //import org.apache.karaf.shell.commands.Command;
 //import org.onosproject.cli.AbstractShellCommand;
 
+import org.edge.app.DeviceService;
+
 import org.apache.karaf.shell.commands.Argument;
 import org.apache.karaf.shell.commands.Command;
 import org.onosproject.cli.AbstractShellCommand;
@@ -26,8 +28,19 @@ public class BeginCommand extends AbstractShellCommand {
     protected void execute() {
 
         print("Begin experiment");
+        //DeviceService ds = get(DeviceService.class);
+        //ReactiveForwarding::removeEdgeRule();
+        //fwd.removeEdgeRule();
         //ReactiveForwarding.BEGIN = true;
         //ReactiveForwarding.ATTACK_TYPE = result;
+        /*
+        try {
+            ds.removeEdgeRule();
+            //deviceService.updateConn();
+        } catch (Exception e) {
+            log.warn("exception {}", e.toString());
+            e.printStackTrace();
+        }*/
     }
 
 }
