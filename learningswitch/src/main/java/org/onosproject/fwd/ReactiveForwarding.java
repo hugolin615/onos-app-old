@@ -506,7 +506,7 @@ public class ReactiveForwarding {
             // Stop processing if the packet has been handled, since we
             // can't do any more to it.
 
-            //log.info("Hui Lin Handling inbound packet 1");
+            log.info("Hui Lin Handling inbound packet 1");
 
             if (context.isHandled()) {
                 return;
@@ -606,6 +606,7 @@ public class ReactiveForwarding {
             }
 
 
+            log.info("Hui Lin packet {} from {}.{} to {}.{}", dpid, (srcIp / 256) % 256, srcIp % 256, (dstIp / 256)%256, dstIp % 256);
 
             packetOut(context, outport);
 
