@@ -114,7 +114,7 @@ public class IntentReactiveForwarding {
 
     ////// Hui Lin
     private static final int DEFAULT_DNP3_PORT = 20000;
-    private static final int RELAY_IP = 0x0A000001;
+    private static final int RELAY_IP = 0x0A00000C;
     private static final int CC_IP = 0x0A000003;
     private static final int FAKE_IP = 0x0A000002;
     private static final int SWITCH_LAT_EN = 0;
@@ -126,15 +126,18 @@ public class IntentReactiveForwarding {
     private Map<Integer, Integer> ip2host;
     //private Map<Integer, Long> ackCache;
     private Map<Integer, Map<Integer, Long>> ackCache;
+    private Map<Integer, Map<Integer, Integer>> fcCache;
     //private List<Long> ackLat;
-    private List<Long> appLat;
-    private List<Long> fakeLat; // sometimes fake latency can be quicker
+    private Map<Integer, List<Long>> appLat;
+    private Map<Integer, List<Long>> fakeLat; // sometimes fake latency can be quicker
     private Random ran;
+    private int appCount;
+    private int fakeCount;
     //private Date date;
 
     @Activate
     public void activate() {
-        appId = coreService.registerApplication("org.app.spoofsingle");
+        appId = coreService.registerApplication("org.app.spoofsingle2");
 
         packetService.addProcessor(processor, PacketProcessor.director(2));
 
@@ -148,9 +151,12 @@ public class IntentReactiveForwarding {
         ip2port = new HashMap<String, Map<Integer, PortNumber>>();
         //ackCache = new HashMap<Integer, Long>();
         ackCache = new HashMap<Integer, Map<Integer, Long>>();
-        appLat = new ArrayList<Long>();
-        fakeLat = new ArrayList<Long>();
+        fcCache = new HashMap<Integer, Map<Integer, Integer>>();
+        appLat = new HashMap<Integer, List<Long>>();
+        fakeLat = new HashMap<Integer, List<Long>>();
         ran = new Random();
+        appCount = 0;
+        fakeCount = 0;
         //date = new Date();
 
         log.info("Started");
@@ -163,12 +169,23 @@ public class IntentReactiveForwarding {
         try {
             FileWriter fileWriter = new FileWriter("/home/hugo/OfflineResult/190424_Spoof/sdn.log");
             PrintWriter printWriter = new PrintWriter(fileWriter);
-            for (int i = 0; i < appLat.size(); i++) {
-                printWriter.printf("%d ", appLat.get(i));
+
+            printWriter.printf("real device\n");
+            for (Integer fc : appLat.keySet()) {
+                printWriter.printf("%d\n", fc);
+                for (int i = 0; i < appLat.get(fc).size(); i++) {
+                    printWriter.printf("%d ", appLat.get(fc).get(i));
+                }
             }
             printWriter.printf("\n");
-            for (int i = 0; i < fakeLat.size(); i++) {
-                printWriter.printf("%d ", fakeLat.get(i));
+
+            printWriter.printf("fake device\n");
+
+            for (Integer fc : fakeLat.keySet()) {
+                printWriter.printf("%d\n", fc);
+                for (int i = 0; i < fakeLat.get(fc).size(); i++) {
+                    printWriter.printf("%d ", fakeLat.get(fc).get(i));
+                }
             }
             printWriter.close();
             fileWriter.close();
@@ -181,6 +198,7 @@ public class IntentReactiveForwarding {
         mac2port = null;
         ip2port = null;
         ackCache = null;
+        fcCache = null;
         appLat = null;
         fakeLat = null;
         ran = null;
@@ -309,7 +327,8 @@ public class IntentReactiveForwarding {
                     byte[] dnp3B = dnp3P.serialize();
                     //log.info("Hui Lin found DNP3 request {} {}", dnp3B, dnp3B.length);
                     if (dnp3B.length >= 13) {
-                        //byte dnp3fc = dnp3B[12];
+                        byte dnp3fc = dnp3B[12];
+                        int dnp3fc2 = dnp3fc;
                         //log.info("Hui Lin found DNP3 request 2 {}", dnp3fc);
                         //if (dnp3fc == 0x01) {
                         if (true) {
@@ -319,6 +338,8 @@ public class IntentReactiveForwarding {
                             //log.info("Hui Lin cache DNP3 request time {}", timeMilli);
                             ackCache.putIfAbsent(dstIp, new HashMap<Integer, Long>());
                             ackCache.get(dstIp).put(tcpAck, timeMilli);
+                            fcCache.putIfAbsent(dstIp, new HashMap<Integer, Integer>());
+                            fcCache.get(dstIp).put(tcpAck, dnp3fc2);
                         }
                     }
                 }
@@ -338,26 +359,33 @@ public class IntentReactiveForwarding {
                                 log.info("Hui Lin response time {} {}",
                                         timeMilli, ackCache.get(srcIp).get(tcpSeq));
                                 long curLat = timeMilli - ackCache.get(srcIp).get(tcpSeq);
-                                appLat.add(curLat);
+                                int curFC = fcCache.get(srcIp).get(tcpSeq);
+
+                                appLat.putIfAbsent(curFC, new ArrayList<Long>());
+                                appLat.get(curFC).add(curLat);
                                 //if ((appLat.size() % 10) == 1) {
                                 //    log.info("Hui Lin appLat {}", appLat);
                                 //}
-                                if (appLat.size() > MAX_BUF) {
-                                    appLat.remove(0);
+                                if (appLat.get(curFC).size() > MAX_BUF) {
+                                    appLat.get(curFC).remove(0);
                                 }
-                                if (fakeLat.size() > 0) {
-                                    log.info("real latency {} fake latency {}",
-                                            curLat, fakeLat.get(fakeLat.size() - 1));
-                                    if (curLat < fakeLat.get(fakeLat.size() - 1)) {
-                                        //long start = date.getTime();
-                                        //long start = date.getTime();
-                                        //long end = 0;
-                                        long delay = fakeLat.get(fakeLat.size() - 1) - curLat;
-                                        try {
-                                            //Thread.sleep(delay);
-                                            Thread.sleep(switchLat + delay);
-                                        } catch (InterruptedException e) {
-                                            System.out.println("Sleep exception.");
+                                if (fakeLat.containsKey(curFC)) {
+                                    if (fakeLat.get(curFC).size() > 0) {
+                                        long curFakeLat = fakeLat.get(curFC).get(appCount);
+                                        appCount = (appCount + 1) % (fakeLat.get(curFC).size());
+                                        log.info("real latency {} fake latency {}",
+                                                curLat, curFakeLat);
+                                        if (curLat < curFakeLat) {
+                                            //long start = date.getTime();
+                                            //long start = date.getTime();
+                                            //long end = 0;
+                                            long delay = curFakeLat - curLat;
+                                            try {
+                                                //Thread.sleep(delay);
+                                                Thread.sleep(switchLat + delay);
+                                            } catch (InterruptedException e) {
+                                                System.out.println("Sleep exception.");
+                                            }
                                         }
                                     }
                                 }
@@ -380,22 +408,29 @@ public class IntentReactiveForwarding {
                                 //long timeMilli = date.getTime();
                                 long timeMilli = System.currentTimeMillis();
                                 long curLat = timeMilli - ackCache.get(srcIp).get(tcpSeq);
-                                fakeLat.add(curLat);
-                                if (fakeLat.size() > MAX_BUF) {
-                                    fakeLat.remove(0);
+
+                                int curFC = fcCache.get(srcIp).get(tcpSeq);
+                                fakeLat.putIfAbsent(curFC, new ArrayList<Long>());
+                                fakeLat.get(curFC).add(curLat);
+                                if (fakeLat.get(curFC).size() > MAX_BUF) {
+                                    fakeLat.get(curFC).remove(0);
                                 }
-                                if (appLat.size() > 0) {
-                                    log.info("fake latency {} real latency {}", curLat, appLat.get(appLat.size() - 1));
-                                    if (curLat < appLat.get(appLat.size() - 1)) {
-                                        //long start = date.getTime();
-                                        //long start = date.getTime();
-                                        //long end = 0;
-                                        long delay = appLat.get(appLat.size() - 1) - curLat;
-                                        try {
-                                            //Thread.sleep(delay);
-                                            Thread.sleep(switchLat + delay);
-                                        } catch (InterruptedException e) {
-                                            System.out.println("Sleep exception.");
+                                if (appLat.containsKey(curFC)) {
+                                    if (appLat.get(curFC).size() > 0) {
+                                        long curAppLat = appLat.get(curFC).get(fakeCount);
+                                        fakeCount = (fakeCount + 1) % (appLat.get(curFC).size());
+                                        log.info("fake latency {} real latency {}", curLat, curAppLat);
+                                        if (curLat < curAppLat) {
+                                            //long start = date.getTime();
+                                            //long start = date.getTime();
+                                            //long end = 0;
+                                            long delay = curAppLat - curLat;
+                                            try {
+                                                //Thread.sleep(delay);
+                                                Thread.sleep(switchLat + delay);
+                                            } catch (InterruptedException e) {
+                                                System.out.println("Sleep exception.");
+                                            }
                                         }
                                     }
                                 }

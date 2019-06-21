@@ -11,4 +11,8 @@ learningswitch:
 edge:
     simple test process-aware edge computing infrastructure
 
+Spoofsingle:
+    both real devices and fake devices can run at the same time.
 
+Spoofsingle2:
+    real device and fake device cannot run at the same time. 

@@ -1,13 +1,13 @@
 Manifest-Version: 1.0
-Bnd-LastModified: 1560573925754
+Bnd-LastModified: 1561071338579
 Build-Jdk: 1.8.0_191
 Built-By: hugo
 Bundle-Description: Reactive forwarding application using intent service
   (experimental)
 Bundle-License: http://www.apache.org/licenses/LICENSE-2.0.txt
 Bundle-ManifestVersion: 2
-Bundle-Name: onos-app-spoofsingle
-Bundle-SymbolicName: org.onosproject.onos-app-spoofsingle
+Bundle-Name: onos-app-spoofsingle2
+Bundle-SymbolicName: org.onosproject.onos-app-spoofsingle2
 Bundle-Version: 1.0.0.SNAPSHOT
 Created-By: Apache Maven Bundle Plugin
 Export-Package: org.onosproject.ifwd;uses:="org.onosproject.core,org.ono
