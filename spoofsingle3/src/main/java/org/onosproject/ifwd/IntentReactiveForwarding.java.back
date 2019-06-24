@@ -21,8 +21,6 @@ import org.apache.felix.scr.annotations.Deactivate;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.ReferenceCardinality;
 import org.onlab.packet.Ethernet;
-import org.onlab.packet.TCP;
-import org.onlab.packet.IPacket;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.Host;
@@ -60,19 +58,10 @@ import static org.slf4j.LoggerFactory.getLogger;
 import org.onlab.packet.IPv4;
 import org.onosproject.net.DeviceId;
 
-import java.util.HashMap;
+//import java.util.HashMap;
 import java.util.Map;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Random;
-//import com.google.common.collect.Maps;
+import com.google.common.collect.Maps;
 //import com.google.common.collect.Lists;
-//import java.util.Calendar;
-//import java.util.Date;
-//import java.time.ZonedDateTime;
-import java.io.FileWriter;
-import java.io.PrintWriter;
-import java.io.IOException;
 
 /**
  * WORK-IN-PROGRESS: Sample reactive forwarding application using intent framework.
@@ -113,32 +102,13 @@ public class IntentReactiveForwarding {
                                                                             IntentState.WITHDRAW_REQ);
 
     ////// Hui Lin
-    private static final int DEFAULT_DNP3_PORT = 20000;
-    //private static final int RELAY_IP = 0x0A00000C;
-    private static final int RELAY_IP = 0x0A000001;
-    private static final int CC_IP = 0x0A000003;
-    private static final int FAKE_IP = 0x0A000002;
-    private static final int SWITCH_LAT_EN = 0;
-    private static final int SWITCH_LAT_AVE = 20;  // in milliseconds
-    private static final int SWITCH_LAT_STDEV = 5; // in milliseconds
-    private static final int MAX_BUF = 1000;
     private Map<String, Map<String, PortNumber>> mac2port;
     private Map<String, Map<Integer, PortNumber>> ip2port;
     private Map<Integer, Integer> ip2host;
-    //private Map<Integer, Long> ackCache;
-    private Map<Integer, Map<Integer, Long>> ackCache;
-    private Map<Integer, Map<Integer, Integer>> fcCache;
-    //private List<Long> ackLat;
-    private Map<Integer, List<Long>> appLat;
-    private Map<Integer, List<Long>> fakeLat; // sometimes fake latency can be quicker
-    private Random ran;
-    private int appCount;
-    private int fakeCount;
-    //private Date date;
 
     @Activate
     public void activate() {
-        appId = coreService.registerApplication("org.app.spoofsingle2");
+        appId = coreService.registerApplication("org.app.spoofsingle");
 
         packetService.addProcessor(processor, PacketProcessor.director(2));
 
@@ -146,65 +116,13 @@ public class IntentReactiveForwarding {
         selector.matchEthType(Ethernet.TYPE_IPV4);
         packetService.requestPackets(selector.build(), PacketPriority.REACTIVE, appId);
 
-        //mac2port = Maps.newHashMap();
-        //ip2port = Maps.newHashMap();
-        mac2port = new HashMap<String, Map<String, PortNumber>>();
-        ip2port = new HashMap<String, Map<Integer, PortNumber>>();
-        //ackCache = new HashMap<Integer, Long>();
-        ackCache = new HashMap<Integer, Map<Integer, Long>>();
-        fcCache = new HashMap<Integer, Map<Integer, Integer>>();
-        appLat = new HashMap<Integer, List<Long>>();
-        fakeLat = new HashMap<Integer, List<Long>>();
-        ran = new Random();
-        appCount = 0;
-        fakeCount = 0;
-        //date = new Date();
-
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
-
-        // record the appLat and fakeLat
-        try {
-            FileWriter fileWriter = new FileWriter("/home/hugo/OfflineResult/190424_Spoof/sdn.log");
-            PrintWriter printWriter = new PrintWriter(fileWriter);
-
-            printWriter.printf("real device\n");
-            for (Integer fc : appLat.keySet()) {
-                printWriter.printf("%d\n", fc);
-                for (int i = 0; i < appLat.get(fc).size(); i++) {
-                    printWriter.printf("%d ", appLat.get(fc).get(i));
-                }
-                printWriter.printf("\n");
-            }
-
-            printWriter.printf("fake device\n");
-
-            for (Integer fc : fakeLat.keySet()) {
-                printWriter.printf("%d\n", fc);
-                for (int i = 0; i < fakeLat.get(fc).size(); i++) {
-                    printWriter.printf("%d ", fakeLat.get(fc).get(i));
-                }
-                printWriter.printf("\n");
-            }
-            printWriter.close();
-            fileWriter.close();
-        } catch (IOException e) {
-            System.out.println("File write exception");
-        }
-
         packetService.removeProcessor(processor);
         processor = null;
-        mac2port = null;
-        ip2port = null;
-        ackCache = null;
-        fcCache = null;
-        appLat = null;
-        fakeLat = null;
-        ran = null;
-        //date = null;
         log.info("Stopped");
     }
 
@@ -213,7 +131,6 @@ public class IntentReactiveForwarding {
      */
     private class ReactivePacketProcessor implements PacketProcessor {
 
-        // CHECKSTYLE IGNORE MethodLength FOR NEXT 300 LINES
         @Override
         public void process(PacketContext context) {
             // Stop processing if the packet has been handled, since we
@@ -225,9 +142,7 @@ public class IntentReactiveForwarding {
             Ethernet ethPkt = pkt.parsed();
             PortNumber outport;
             IPv4 ipv4Packet;
-            //TCP tcpPacket;
-            //int tcpDstPort = 0;
-            //int tcpSrcPort = 0;
+
 
             if (ethPkt == null) {
                 return;
@@ -262,8 +177,8 @@ public class IntentReactiveForwarding {
             Integer srcIp = ipv4Packet.getSourceAddress();
             Integer dstIp = ipv4Packet.getDestinationAddress();
 
-            mac2port.putIfAbsent(dpidStr, new HashMap<String, PortNumber>());
-            ip2port.putIfAbsent(dpidStr, new HashMap<Integer, PortNumber>());
+            mac2port.putIfAbsent(dpidStr, Maps.newHashMap());
+            ip2port.putIfAbsent(dpidStr, Maps.newHashMap());
             //switchCount.putIfAbsent(dpidStr, 0);
 
             // I did not use it
@@ -310,141 +225,9 @@ public class IntentReactiveForwarding {
                 }
             }
 
-            // cache the ack of the DNP3 request
-            if (ipv4Packet.getProtocol() == IPv4.PROTOCOL_TCP) {
-                //log.info("Hui Lin found TCP");
-                long switchLat = 0;
-                if (SWITCH_LAT_EN == 1) {
-                    switchLat = (long) ran.nextGaussian() * SWITCH_LAT_STDEV + SWITCH_LAT_AVE;
-                }
 
-                TCP tcpPacket = (TCP) ipv4Packet.getPayload();
-                int tcpSrcPort = tcpPacket.getSourcePort();
-                int tcpDstPort = tcpPacket.getDestinationPort();
-
-                // cache the time of the request
-                //if ((dstIp == RELAY_IP) && (srcIp == CC_IP) && (tcpDstPort == DEFAULT_DNP3_PORT)) {
-                if ((srcIp == CC_IP) && (tcpDstPort == DEFAULT_DNP3_PORT)) {
-                    IPacket dnp3P = tcpPacket.getPayload();
-                    byte[] dnp3B = dnp3P.serialize();
-                    //log.info("Hui Lin found DNP3 request {} {}", dnp3B, dnp3B.length);
-                    if (dnp3B.length >= 13) {
-                        byte dnp3fc = dnp3B[12];
-                        int dnp3fc2 = dnp3fc;
-                        //log.info("Hui Lin found DNP3 request 2 {}", dnp3fc);
-                        //if (dnp3fc == 0x01) {
-                        if (true) {
-                            int tcpAck = tcpPacket.getAcknowledge();
-                            //long timeMilli = date.getTime();
-                            long timeMilli = System.currentTimeMillis();
-                            //log.info("Hui Lin cache DNP3 request time {}", timeMilli);
-                            ackCache.putIfAbsent(dstIp, new HashMap<Integer, Long>());
-                            ackCache.get(dstIp).put(tcpAck, timeMilli);
-                            fcCache.putIfAbsent(dstIp, new HashMap<Integer, Integer>());
-                            fcCache.get(dstIp).put(tcpAck, dnp3fc2);
-                        }
-                    }
-                }
-                // calculate the latency of ack and responses from real device
-                if ((srcIp == RELAY_IP) && (dstIp == CC_IP)) {
-                    // simulate switch latency
-                    log.info("Hui Lin found DNP3 responses");
-                    IPacket dnp3P = tcpPacket.getPayload();
-                    byte[] dnp3B = dnp3P.serialize();
-                    if (dnp3B.length > 0) {
-                        int tcpSeq = tcpPacket.getSequence();
-                        log.info("Hui Lin found DNP3 responses 2");
-                        if (ackCache.containsKey(srcIp)) {
-                            if (ackCache.get(srcIp).containsKey(tcpSeq)) {
-                                //long timeMilli = date.getTime();
-                                long timeMilli = System.currentTimeMillis();
-                                log.info("Hui Lin response time {} {}",
-                                        timeMilli, ackCache.get(srcIp).get(tcpSeq));
-                                long curLat = timeMilli - ackCache.get(srcIp).get(tcpSeq);
-                                int curFC = fcCache.get(srcIp).get(tcpSeq);
-
-                                appLat.putIfAbsent(curFC, new ArrayList<Long>());
-                                appLat.get(curFC).add(curLat);
-                                //if ((appLat.size() % 10) == 1) {
-                                //    log.info("Hui Lin appLat {}", appLat);
-                                //}
-                                if (appLat.get(curFC).size() > MAX_BUF) {
-                                    appLat.get(curFC).remove(0);
-                                }
-                                if (fakeLat.containsKey(curFC)) {
-                                    if (fakeLat.get(curFC).size() > 0) {
-                                        long curFakeLat = fakeLat.get(curFC).get(appCount);
-                                        appCount = (appCount + 1) % (fakeLat.get(curFC).size());
-                                        log.info("real latency {} fake latency {}",
-                                                curLat, curFakeLat);
-                                        if (curLat < curFakeLat) {
-                                            //long start = date.getTime();
-                                            //long start = date.getTime();
-                                            //long end = 0;
-                                            long delay = curFakeLat - curLat;
-                                            try {
-                                                //Thread.sleep(delay);
-                                                Thread.sleep(switchLat + delay);
-                                            } catch (InterruptedException e) {
-                                                System.out.println("Sleep exception.");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // adjust the latency
-                if ((srcIp == FAKE_IP) && (dstIp == CC_IP)) {
-                    //log.info("Hui Lin found DNP3 response from {}", srcIp);
-                    IPacket dnp3P = tcpPacket.getPayload();
-                    byte[] dnp3B = dnp3P.serialize();
-                    if (dnp3B.length > 0) {
-                        int tcpSeq = tcpPacket.getSequence();
-                        //log.info("Hui Lin found DNP3 response 2 from {}", srcIp);
-                        if (ackCache.containsKey(srcIp)) {
-                            log.info("Hui Lin has fake ack cached");
-                            if (ackCache.get(srcIp).containsKey(tcpSeq)) {
-                                //long timeMilli = date.getTime();
-                                long timeMilli = System.currentTimeMillis();
-                                long curLat = timeMilli - ackCache.get(srcIp).get(tcpSeq);
-
-                                int curFC = fcCache.get(srcIp).get(tcpSeq);
-                                fakeLat.putIfAbsent(curFC, new ArrayList<Long>());
-                                fakeLat.get(curFC).add(curLat);
-                                if (fakeLat.get(curFC).size() > MAX_BUF) {
-                                    fakeLat.get(curFC).remove(0);
-                                }
-                                if (appLat.containsKey(curFC)) {
-                                    if (appLat.get(curFC).size() > 0) {
-                                        long curAppLat = appLat.get(curFC).get(fakeCount);
-                                        fakeCount = (fakeCount + 1) % (appLat.get(curFC).size());
-                                        log.info("fake latency {} real latency {}", curLat, curAppLat);
-                                        if (curLat < curAppLat) {
-                                            //long start = date.getTime();
-                                            //long start = date.getTime();
-                                            //long end = 0;
-                                            long delay = curAppLat - curLat;
-                                            try {
-                                                //Thread.sleep(delay);
-                                                Thread.sleep(switchLat + delay);
-                                            } catch (InterruptedException e) {
-                                                System.out.println("Sleep exception.");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            //log.info("Hui Lin packet from {}.{} to {}.{} at switch {} outport {}",
-            //        (srcIp / 256) % 256, srcIp % 256, (dstIp / 256) % 256, dstIp % 256,
-            //        dpid, outport);
+            log.info("Hui Lin packet {} from {}.{} to {}.{}", dpid, (srcIp / 256) % 256,
+                    srcIp % 256, (dstIp / 256) % 256, dstIp % 256);
 
             packetOut(context, outport);
 

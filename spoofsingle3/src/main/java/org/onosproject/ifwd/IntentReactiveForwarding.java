@@ -118,9 +118,9 @@ public class IntentReactiveForwarding {
     private static final int RELAY_IP = 0x0A000001;
     private static final int CC_IP = 0x0A000003;
     private static final int FAKE_IP = 0x0A000002;
-    private static final int SWITCH_LAT_EN = 0;
-    private static final int SWITCH_LAT_AVE = 20;  // in milliseconds
-    private static final int SWITCH_LAT_STDEV = 5; // in milliseconds
+    private static final int SWITCH_LAT_EN = 1;
+    private static final int SWITCH_LAT_AVE = 10;  // in milliseconds
+    private static final int SWITCH_LAT_STDEV = 0; // in milliseconds
     private static final int MAX_BUF = 1000;
     private Map<String, Map<String, PortNumber>> mac2port;
     private Map<String, Map<Integer, PortNumber>> ip2port;
@@ -132,13 +132,15 @@ public class IntentReactiveForwarding {
     private Map<Integer, List<Long>> appLat;
     private Map<Integer, List<Long>> fakeLat; // sometimes fake latency can be quicker
     private Random ran;
-    private int appCount;
-    private int fakeCount;
+    //private int appCount;
+    private Map<Integer, Integer> appCount;
+    //private int fakeCount;
+    private Map<Integer, Integer> fakeCount;
     //private Date date;
 
     @Activate
     public void activate() {
-        appId = coreService.registerApplication("org.app.spoofsingle2");
+        appId = coreService.registerApplication("org.app.spoofsingle3");
 
         packetService.addProcessor(processor, PacketProcessor.director(2));
 
@@ -156,8 +158,10 @@ public class IntentReactiveForwarding {
         appLat = new HashMap<Integer, List<Long>>();
         fakeLat = new HashMap<Integer, List<Long>>();
         ran = new Random();
-        appCount = 0;
-        fakeCount = 0;
+        //appCount = 0;
+        appCount = new HashMap<Integer, Integer>();
+        fakeCount = new HashMap<Integer, Integer>();
+        //fakeCount = 0;
         //date = new Date();
 
         log.info("Started");
@@ -203,6 +207,8 @@ public class IntentReactiveForwarding {
         fcCache = null;
         appLat = null;
         fakeLat = null;
+        appCount = null;
+        fakeCount = null;
         ran = null;
         //date = null;
         log.info("Stopped");
@@ -362,19 +368,14 @@ public class IntentReactiveForwarding {
                                         timeMilli, ackCache.get(srcIp).get(tcpSeq));
                                 long curLat = timeMilli - ackCache.get(srcIp).get(tcpSeq);
                                 int curFC = fcCache.get(srcIp).get(tcpSeq);
+                                long totalLat = 0;
 
-                                appLat.putIfAbsent(curFC, new ArrayList<Long>());
-                                appLat.get(curFC).add(curLat);
-                                //if ((appLat.size() % 10) == 1) {
-                                //    log.info("Hui Lin appLat {}", appLat);
-                                //}
-                                if (appLat.get(curFC).size() > MAX_BUF) {
-                                    appLat.get(curFC).remove(0);
-                                }
                                 if (fakeLat.containsKey(curFC)) {
                                     if (fakeLat.get(curFC).size() > 0) {
-                                        long curFakeLat = fakeLat.get(curFC).get(appCount);
-                                        appCount = (appCount + 1) % (fakeLat.get(curFC).size());
+                                        appCount.putIfAbsent(curFC, 0);
+                                        long curFakeLat = fakeLat.get(curFC).get(appCount.get(curFC));
+                                        //appCount = (appCount + 1) % (fakeLat.get(curFC).size());
+                                        appCount.put(curFC, (appCount.get(curFC) + 1) % (fakeLat.get(curFC).size()));
                                         log.info("real latency {} fake latency {}",
                                                 curLat, curFakeLat);
                                         if (curLat < curFakeLat) {
@@ -383,14 +384,31 @@ public class IntentReactiveForwarding {
                                             //long end = 0;
                                             long delay = curFakeLat - curLat;
                                             try {
-                                                //Thread.sleep(delay);
-                                                Thread.sleep(switchLat + delay);
+                                                Thread.sleep(delay);
+                                                //Thread.sleep(switchLat + delay);
                                             } catch (InterruptedException e) {
                                                 System.out.println("Sleep exception.");
                                             }
+                                            totalLat = curFakeLat;
                                         }
                                     }
+                                } else {
+                                    // the case when real app is running first
+                                    try {
+                                        //Thread.sleep(delay);
+                                        Thread.sleep(switchLat);
+                                    } catch (InterruptedException e) {
+                                        System.out.println("Sleep exception.");
+                                    }
+                                    totalLat = switchLat + curLat;
                                 }
+                                appLat.putIfAbsent(curFC, new ArrayList<Long>());
+                                appLat.get(curFC).add(totalLat);
+
+                                if (appLat.get(curFC).size() > MAX_BUF) {
+                                    appLat.get(curFC).remove(0);
+                                }
+
                             }
                         }
                     }
@@ -410,17 +428,15 @@ public class IntentReactiveForwarding {
                                 //long timeMilli = date.getTime();
                                 long timeMilli = System.currentTimeMillis();
                                 long curLat = timeMilli - ackCache.get(srcIp).get(tcpSeq);
+                                long totalLat = 0;
 
                                 int curFC = fcCache.get(srcIp).get(tcpSeq);
-                                fakeLat.putIfAbsent(curFC, new ArrayList<Long>());
-                                fakeLat.get(curFC).add(curLat);
-                                if (fakeLat.get(curFC).size() > MAX_BUF) {
-                                    fakeLat.get(curFC).remove(0);
-                                }
                                 if (appLat.containsKey(curFC)) {
                                     if (appLat.get(curFC).size() > 0) {
-                                        long curAppLat = appLat.get(curFC).get(fakeCount);
-                                        fakeCount = (fakeCount + 1) % (appLat.get(curFC).size());
+                                        fakeCount.putIfAbsent(curFC, 0);
+                                        long curAppLat = appLat.get(curFC).get(fakeCount.get(curFC));
+                                        //fakeCount = (fakeCount + 1) % (appLat.get(curFC).size());
+                                        fakeCount.put(curFC, (fakeCount.get(curFC) + 1) % (appLat.get(curFC).size()));
                                         log.info("fake latency {} real latency {}", curLat, curAppLat);
                                         if (curLat < curAppLat) {
                                             //long start = date.getTime();
@@ -428,13 +444,28 @@ public class IntentReactiveForwarding {
                                             //long end = 0;
                                             long delay = curAppLat - curLat;
                                             try {
-                                                //Thread.sleep(delay);
-                                                Thread.sleep(switchLat + delay);
+                                                Thread.sleep(delay);
+                                                //Thread.sleep(switchLat + delay);
                                             } catch (InterruptedException e) {
                                                 System.out.println("Sleep exception.");
                                             }
+                                            totalLat = curAppLat;
                                         }
                                     }
+                                }  else {
+                                    // the case when real app is running first
+                                    try {
+                                        //Thread.sleep(delay);
+                                        Thread.sleep(switchLat);
+                                    } catch (InterruptedException e) {
+                                        System.out.println("Sleep exception.");
+                                    }
+                                    totalLat = switchLat + curLat;
+                                }
+                                fakeLat.putIfAbsent(curFC, new ArrayList<Long>());
+                                fakeLat.get(curFC).add(totalLat);
+                                if (fakeLat.get(curFC).size() > MAX_BUF) {
+                                    fakeLat.get(curFC).remove(0);
                                 }
                             }
                         }

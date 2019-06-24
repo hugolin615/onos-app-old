@@ -16,3 +16,7 @@ Spoofsingle:
 
 Spoofsingle2:
     real device and fake device cannot run at the same time. 
+
+Spoofsingle3:
+    adding a fixed delay to ensure that real device and fake device has the same latency
+    can run in both sequently and in parallel
